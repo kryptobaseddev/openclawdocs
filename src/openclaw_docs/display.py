@@ -81,6 +81,55 @@ def fmt_topic_full(topic: dict, content: str) -> str:
     return "\n".join(lines)
 
 
+def fmt_topic_section(topic: dict, content: str, section_query: str) -> str:
+    """Extract and display a single section from topic content (PD Level 1.5).
+
+    Fuzzy-matches section_query against ## headings, extracts content between
+    the matched heading and the next heading of same or higher level.
+    """
+    import re
+    from rapidfuzz import fuzz, process
+
+    # Find all ## headings with their positions
+    heading_pattern = re.compile(r"^(#{2,6})\s+(.+)$", re.MULTILINE)
+    headings = [(m.start(), m.end(), len(m.group(1)), m.group(2)) for m in heading_pattern.finditer(content)]
+
+    if not headings:
+        return f"No sections found in {topic['path']}."
+
+    # Fuzzy match the query against heading titles
+    heading_titles = [h[3] for h in headings]
+    matches = process.extract(section_query, heading_titles, scorer=fuzz.WRatio, limit=1, score_cutoff=40.0)
+
+    if not matches:
+        lines = [f"No section matching '{section_query}' in {topic['path']}."]
+        lines.append("Available sections:")
+        for h in headings:
+            if h[2] == 2:  # only ## headings
+                lines.append(f"  - {h[3]}")
+        return "\n".join(lines)
+
+    matched_title, _score, matched_idx = matches[0]
+    matched_heading = headings[matched_idx]
+    start_pos = matched_heading[1]  # end of heading line
+    matched_level = matched_heading[2]
+
+    # Find the end: next heading of same or higher level
+    end_pos = len(content)
+    for h in headings[matched_idx + 1:]:
+        if h[2] <= matched_level:
+            end_pos = h[0]
+            break
+
+    section_content = content[start_pos:end_pos].strip()
+
+    lines = [f"# {topic['title']} > {matched_title}"]
+    lines.append(f"Category: {topic['category']} | Section of {topic['word_count']:,} word topic")
+    lines.append("")
+    lines.append(section_content)
+    return "\n".join(lines)
+
+
 def fmt_categories(categories: list[tuple[str, int]]) -> str:
     """Format category listing."""
     if not categories:

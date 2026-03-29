@@ -1,8 +1,14 @@
-"""Multi-strategy search: FTS5 BM25 + fuzzy title matching."""
+"""Multi-strategy search: FTS5 BM25 + fuzzy title matching.
+
+Scoring strategy:
+- FTS5 BM25 is the primary signal (full-text content + weighted columns)
+- Fuzzy title matching is secondary (catches typos, only high-confidence matches)
+- Category boost when query matches a category name exactly
+- FTS5 results dominate; fuzzy only contributes for high-confidence title matches
+"""
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from rapidfuzz import fuzz, process
@@ -27,31 +33,29 @@ class SearchEngine:
         if not query.strip():
             return []
 
-        # Strategy 1: FTS5 BM25 (primary)
-        fts_results = self.storage.fts_search(query, limit=limit * 2)
+        # Strategy 1: FTS5 BM25 (primary — full content search)
+        fts_results = self.storage.fts_search(query, limit=limit * 3)
 
-        # Strategy 2: Fuzzy title match (secondary)
-        fuzzy_results = self._fuzzy_search(query, limit=limit * 2)
+        # Strategy 2: Fuzzy title match (secondary — typo tolerance only)
+        # High cutoff (75%) to avoid "discord" matching "discovery"
+        fuzzy_results = self._fuzzy_search(query, limit=limit)
 
-        # Merge and score
+        # Merge with FTS5 dominant
         merged = self._merge_results(fts_results, fuzzy_results, query)
 
-        # Filter by category if specified
         if category:
             merged = [r for r in merged if r.category == category]
 
-        # Trim to limit
         merged = merged[:limit]
 
-        # Add snippets if requested
         if include_snippets:
             for result in merged:
                 result.snippet = self._extract_snippet(result.path, query)
 
         return merged
 
-    def _fuzzy_search(self, query: str, limit: int = 20) -> list[SearchResult]:
-        """Fuzzy search over topic titles using rapidfuzz."""
+    def _fuzzy_search(self, query: str, limit: int = 10) -> list[SearchResult]:
+        """Fuzzy search over topic titles. High cutoff for precision."""
         titles = self.storage.get_all_titles()
         if not titles:
             return []
@@ -59,8 +63,9 @@ class SearchEngine:
         title_list = [t[0] for t in titles]
         path_map = {t[0]: t[1] for t in titles}
 
+        # WRatio with 75% cutoff — only genuine title matches, not substring noise
         matches = process.extract(
-            query, title_list, scorer=fuzz.WRatio, limit=limit, score_cutoff=50.0
+            query, title_list, scorer=fuzz.WRatio, limit=limit, score_cutoff=75.0
         )
 
         results = []
@@ -82,44 +87,45 @@ class SearchEngine:
         fuzzy_results: list[SearchResult],
         query: str,
     ) -> list[SearchResult]:
-        """Merge FTS5 and fuzzy results with weighted scoring."""
+        """Merge results. FTS5 dominates (0.7 weight), fuzzy supplements (0.3)."""
         scored: dict[str, SearchResult] = {}
 
-        # FTS5 results (weight 0.6)
+        # Normalize FTS5 scores relative to the best hit
+        max_fts = max((r.score for r in fts_results), default=0.0) or 1.0
         for r in fts_results:
+            normalized = r.score / max_fts  # best hit = 1.0
             scored[r.path] = SearchResult(
                 title=r.title,
                 path=r.path,
                 category=r.category,
-                score=round(r.score * 0.6, 2),
-                match_type=r.match_type,
+                score=round(normalized * 0.7, 3),
+                match_type="content",
             )
 
-        # Fuzzy results (weight 0.3)
+        # Add fuzzy (only high-confidence title matches)
         for r in fuzzy_results:
+            fuzzy_contrib = round(r.score * 0.3, 3)
             if r.path in scored:
-                scored[r.path].score = round(scored[r.path].score + r.score * 0.3, 2)
-                if r.match_type == "title":
-                    scored[r.path].match_type = "title+content"
+                scored[r.path].score = round(scored[r.path].score + fuzzy_contrib, 3)
+                scored[r.path].match_type = "title+content"
             else:
                 scored[r.path] = SearchResult(
                     title=r.title,
                     path=r.path,
                     category=r.category,
-                    score=round(r.score * 0.3, 2),
-                    match_type=r.match_type,
+                    score=fuzzy_contrib,
+                    match_type="title",
                 )
 
-        # Category boost (weight 0.1)
+        # Category boost
         query_lower = query.lower().strip()
-        for path, result in scored.items():
+        for result in scored.values():
             if result.category.lower() == query_lower:
-                result.score = round(result.score + 0.1, 2)
+                result.score = round(result.score + 0.1, 3)
 
-        # Sort by score descending, cap at 1.0
         results = sorted(scored.values(), key=lambda r: r.score, reverse=True)
         for r in results:
-            r.score = min(1.0, r.score)
+            r.score = min(1.0, round(r.score, 2))
         return results
 
     def _extract_snippet(self, path: str, query: str, context_chars: int = 150) -> str:
@@ -128,7 +134,6 @@ class SearchEngine:
         if not content:
             return ""
 
-        # Find the best position for the query terms
         terms = query.lower().split()
         content_lower = content.lower()
 
@@ -140,16 +145,16 @@ class SearchEngine:
                 break
 
         if best_pos == -1:
-            # Return first chunk as fallback
             return content[:context_chars].strip() + "..."
 
         start = max(0, best_pos - context_chars // 2)
         end = min(len(content), best_pos + context_chars // 2)
 
         snippet = content[start:end].strip()
-        # Clean up partial lines at boundaries
         if start > 0:
-            snippet = "..." + snippet[snippet.find(" ") + 1:]
+            first_space = snippet.find(" ")
+            if first_space > 0:
+                snippet = "..." + snippet[first_space + 1:]
         if end < len(content):
             last_space = snippet.rfind(" ")
             if last_space > 0:

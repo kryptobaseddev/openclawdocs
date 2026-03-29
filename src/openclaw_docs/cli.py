@@ -72,15 +72,21 @@ def search(ctx: click.Context, query: str, limit: int, verbose: bool, category: 
 @cli.command()
 @click.argument("topic_path")
 @click.option("--full", is_flag=True, help="Show complete content instead of summary")
+@click.option("--section", "-s", default=None, help="Show only a specific section by name (fuzzy match)")
 @click.pass_context
-def show(ctx: click.Context, topic_path: str, full: bool) -> None:
-    """Display a topic. Default: summary + section list."""
+def show(ctx: click.Context, topic_path: str, full: bool, section: str | None) -> None:
+    """Display a topic. Default: summary + section list.
+
+    Progressive disclosure levels:
+      (default)    Summary + section list (~150 tokens)
+      --section X  Just one section (~200-500 tokens)
+      --full       Complete content (varies)
+    """
     storage: DocsStorage = ctx.obj["storage"]
     _require_synced(storage)
 
     topic = storage.get_topic(topic_path)
     if not topic:
-        # Try fuzzy match
         from rapidfuzz import fuzz, process
 
         titles = storage.get_all_titles()
@@ -99,7 +105,14 @@ def show(ctx: click.Context, topic_path: str, full: bool) -> None:
 
     topics_dir = ctx.obj["data_dir"] / "topics" if "data_dir" in ctx.obj else get_topics_dir()
 
-    if full:
+    if section:
+        content = storage.get_topic_content(topic_path, topics_dir)
+        if content:
+            click.echo(display.fmt_topic_section(topic, content, section))
+        else:
+            click.echo("Content not available.")
+            raise SystemExit(1)
+    elif full:
         content = storage.get_topic_content(topic_path, topics_dir)
         if content:
             click.echo(display.fmt_topic_full(topic, content))
