@@ -1,10 +1,17 @@
-"""Output formatting with MVI and progressive disclosure for LLM agents."""
+"""Output formatting with MVI and progressive disclosure for LLM agents.
+
+All content is cleaned via cleaner.clean_content() before display:
+- Mintlify MDX components converted to standard markdown
+- Code fence theme metadata stripped
+- Excessive whitespace normalized
+"""
 
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
 
+from openclaw_docs.cleaner import clean_content, extract_code_blocks
 from openclaw_docs.models import SearchResult, SyncReport, SyncStatus
 
 
@@ -69,7 +76,7 @@ def fmt_topic_summary(topic: dict, content: str | None = None) -> str:
 
 
 def fmt_topic_full(topic: dict, content: str) -> str:
-    """Format topic with full content (Level 2)."""
+    """Format topic with full content (Level 2). Cleans Mintlify MDX."""
     lines = [f"# {topic['title']}"]
     lines.append(
         f"Category: {topic['category']} | "
@@ -77,7 +84,25 @@ def fmt_topic_full(topic: dict, content: str) -> str:
         f"{topic['source_url']}"
     )
     lines.append("")
-    lines.append(content)
+    lines.append(clean_content(content))
+    return "\n".join(lines)
+
+
+def fmt_code_only(topic: dict, content: str) -> str:
+    """Extract and return only code blocks from topic content.
+
+    Returns each code block with its language tag, stripped of theme metadata.
+    Optimized for agents that need config examples without surrounding prose.
+    """
+    blocks = extract_code_blocks(content)
+    if not blocks:
+        return f"No code blocks found in {topic['path']}."
+
+    lines = [f"# {topic['title']} — code blocks ({len(blocks)})"]
+    for i, block in enumerate(blocks, 1):
+        lines.append(f"\n```{block['language']}")
+        lines.append(block["content"])
+        lines.append("```")
     return "\n".join(lines)
 
 
@@ -121,7 +146,7 @@ def fmt_topic_section(topic: dict, content: str, section_query: str) -> str:
             end_pos = h[0]
             break
 
-    section_content = content[start_pos:end_pos].strip()
+    section_content = clean_content(content[start_pos:end_pos].strip())
 
     lines = [f"# {topic['title']} > {matched_title}"]
     lines.append(f"Category: {topic['category']} | Section of {topic['word_count']:,} word topic")
