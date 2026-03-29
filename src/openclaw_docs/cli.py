@@ -1,6 +1,11 @@
 """CLI entry point for openclaw-docs.
 
 All commands support --json for structured agent output.
+
+Exit codes:
+  0 — success (results found, sync complete, etc.)
+  1 — no results or not found (search returned nothing, topic doesn't exist)
+  2 — error (network failure, no sync, invalid state)
 """
 
 from __future__ import annotations
@@ -18,10 +23,15 @@ from openclaw_docs.storage import DocsStorage
 from openclaw_docs.sync import DocsSyncer
 
 
+EXIT_OK = 0
+EXIT_NOT_FOUND = 1
+EXIT_ERROR = 2
+
+
 def _require_synced(storage: DocsStorage) -> None:
     if storage.count_topics() == 0:
         click.echo("No local docs. Run `ocdocs sync` first.")
-        raise SystemExit(1)
+        raise SystemExit(EXIT_ERROR)
 
 
 def _topics_dir(ctx: click.Context) -> Path:
@@ -84,6 +94,13 @@ def search(ctx: click.Context, query: str, limit: int, verbose: bool,
     engine = SearchEngine(storage, _topics_dir(ctx))
     results = engine.search(query, limit=limit, category=category, include_snippets=verbose)
 
+    if not results:
+        if use_json:
+            _out({"type": "search", "query": query, "results": [], "total": 0}, True)
+        else:
+            click.echo("No results found.")
+        raise SystemExit(EXIT_NOT_FOUND)
+
     if use_json:
         _out({"type": "search", "query": query, "results": [
             {"rank": i, "path": r.path, "title": r.title, "score": r.score,
@@ -138,7 +155,7 @@ def show(ctx: click.Context, topic_path: str, full: bool, section: str | None,
                     _out({"type": "error", "error": "not_found", "query": topic_path}, True)
                 else:
                     click.echo(f"Topic '{topic_path}' not found.")
-        raise SystemExit(1)
+        raise SystemExit(EXIT_NOT_FOUND)
 
     topics_dir = _topics_dir(ctx)
     sections_list = json_mod.loads(topic["sections"]) if isinstance(topic["sections"], str) else topic["sections"]
@@ -175,14 +192,14 @@ def show(ctx: click.Context, topic_path: str, full: bool, section: str | None,
             click.echo(display.fmt_code_only(topic, content))
         else:
             click.echo("Content not available.")
-            raise SystemExit(1)
+            raise SystemExit(EXIT_ERROR)
     elif section:
         content = storage.get_topic_content(topic_path, topics_dir)
         if content:
             click.echo(display.fmt_topic_section(topic, content, section))
         else:
             click.echo("Content not available.")
-            raise SystemExit(1)
+            raise SystemExit(EXIT_ERROR)
     elif full:
         content = storage.get_topic_content(topic_path, topics_dir)
         if content:
@@ -263,7 +280,7 @@ def diff(ctx: click.Context, use_json: bool) -> None:
             _out({"type": "error", "error": "fetch_failed"}, True)
         else:
             click.echo("Failed to fetch remote docs.")
-        raise SystemExit(1)
+        raise SystemExit(EXIT_ERROR)
 
     remote_topics = parse_full_content(llms_full)
     remote_map = {t.path: t.content_hash for t in remote_topics}
