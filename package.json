@@ -1,6 +1,6 @@
 {
   "name": "openclawdocs",
-  "version": "2026.3.2",
+  "version": "2026.3.3",
   "description": "LLM-agent-optimized CLI for syncing, searching, and browsing OpenClaw documentation locally",
   "keywords": [
     "openclaw",
