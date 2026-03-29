@@ -35,10 +35,11 @@
     "bin/",
     "src/",
     "pyproject.toml",
-    "setup.sh",
+    "scripts/",
     "README.md",
     "LICENSE",
-    "llms.txt"
+    "llms.txt",
+    "docs/"
   ],
   "scripts": {
     "postinstall": "node bin/postinstall.js",
