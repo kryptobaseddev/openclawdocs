@@ -32,9 +32,11 @@ jobs:
         run: npm install
 
       # Changesets action:
-      # - If pending changesets exist: creates a "Version Package" PR
-      #   that runs `npm run version` (changeset version → vg bump → vg fix-changelog → vg sync)
-      # - If no pending changesets and version PR merged: runs `npm run release`
+      # - If pending changesets: creates a "Version Package" PR
+      # - If version PR just merged (no pending changesets): publishes
+      #
+      # version: runs locally via `npm run version` (changeset → vg bump → sync)
+      # publish: just `npm publish` — version is already correct from the PR
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@v1
@@ -42,17 +44,17 @@ jobs:
           title: "chore: version package"
           commit: "chore: version package"
           version: npm run version
-          publish: npm run release
+          publish: npm publish --access public
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # After publish, tag with VG and create GitHub release
-      - name: Tag and Release
+      - name: Create GitHub Release
         if: steps.changesets.outputs.published == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          vg tag "$VERSION" --yes
-          git push --tags
+          git tag "v${VERSION}" || true
+          git push --tags || true
+          gh release create "v${VERSION}" --title "v${VERSION}" --generate-release-notes || true

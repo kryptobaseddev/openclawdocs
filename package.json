@@ -46,7 +46,7 @@
     "test": "node bin/openclawdocs.js status",
     "changeset": "changeset",
     "version": "node scripts/version.js",
-    "release": "npm run version && npm publish --access public"
+    "release": "npm publish --access public"
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
