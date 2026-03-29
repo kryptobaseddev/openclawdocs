@@ -7,7 +7,19 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
 
 ## [Unreleased]
 
-## [2026.3.2] - 2026-03-29
+## [2026.3.3] - 2026-03-29
+
+### Fixed
+
+- Simplify version pipeline with VG 1.1.0 fixes
+
+  - VG 1.1.0 fixes sync corruption of package.json scripts.version (#10)
+  - package.json re-added to VG sync files (manual sync removed)
+  - version.js simplified: only calcNextCalVer workaround remains (VG #9)
+  - Updated @codluv/versionguard to 1.1.0
+
+
+## [2026.3.3] - 2026-03-29
 
 ### Fixed
 
@@ -32,8 +44,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
 
 - Version correction: 2026.3.0 was the initial release, this is the first patch
 
-
-## [2026.3.2] - 2026-03-29
+## [2026.3.3] - 2026-03-29
 
 ### Added
 
@@ -53,7 +64,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
   - Changesets + VersionGuard CalVer release pipeline
   - GitHub Actions release workflow
 
-## [2026.3.2] - 2025-03-29
+## [2026.3.3] - 2025-03-29
 
 ### Added
 
