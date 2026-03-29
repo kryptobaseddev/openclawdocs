@@ -7,7 +7,28 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
 
 ## [Unreleased]
 
-## [2025.3.0] - 2025-03-29
+## [2026.3.0] - 2026-03-29
+
+### Added
+
+- Agent-optimized output modes and content cleanup
+
+  - Add --json flag to all commands (search, show, list, status, diff, sync)
+  - Add --code-only flag to show command (extract only code blocks)
+  - Add --compact flag to search and list (TSV, pipeable)
+  - Strip Mintlify MDX components to clean markdown (Steps, Tabs, Accordion, Cards, Notes)
+  - Strip theme={} metadata from code fences
+  - Fix search ranking (BM25 normalization, fuzzy cutoff raised to 75%)
+  - Add --section/-s flag for section-level progressive disclosure
+  - Replace hand-rolled HTMLParser with trafilatura (F1 0.958)
+  - Replace regex section splitting with markdown-it-py AST
+  - Cross-platform data paths via platformdirs
+  - npm package with three aliases: openclawdocs, openclaw-docs, ocdocs
+  - Changesets + VersionGuard CalVer release pipeline
+  - GitHub Actions release workflow
+
+
+## [2026.3.0] - 2025-03-29
 
 ### Added
 
