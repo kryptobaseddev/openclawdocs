@@ -1,11 +1,5 @@
 # Changelog
 
-## 2026.3.1
-
-### Patch Changes
-
-- Version correction: 2026.3.0 was the initial release, this is the first patch
-
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -13,7 +7,33 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
 
 ## [Unreleased]
 
-## [2026.3.1] - 2026-03-29
+## [2026.3.2] - 2026-03-29
+
+### Fixed
+
+- Exit codes, related topics, dependency updates
+
+  - Exit codes for agent error handling (0=success, 1=not found, 2=error)
+  - Related topics extracted from cross-references in show output
+  - Dependency minimums updated to latest versions
+
+- Exit codes, related topics, dep updates, CI fixes
+
+  - Exit codes: 0=success, 1=not found, 2=error
+  - Related topics extracted from content cross-references in show output
+  - Dependency minimums updated to latest versions
+  - Fixed version script: use own CalVer calc instead of vg bump --apply (picks wrong option in CI)
+  - Fixed release workflow: OIDC trusted publishing, no NPM_TOKEN needed
+  - Added CI changeset check on PRs
+
+## 2026.3.1
+
+### Fixed
+
+- Version correction: 2026.3.0 was the initial release, this is the first patch
+
+
+## [2026.3.2] - 2026-03-29
 
 ### Added
 
@@ -33,7 +53,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
   - Changesets + VersionGuard CalVer release pipeline
   - GitHub Actions release workflow
 
-## [2026.3.1] - 2025-03-29
+## [2026.3.2] - 2025-03-29
 
 ### Added
 
