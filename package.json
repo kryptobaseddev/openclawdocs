@@ -1,0 +1,55 @@
+{
+  "name": "openclawdocs",
+  "version": "2025.3.0",
+  "description": "LLM-agent-optimized CLI for syncing, searching, and browsing OpenClaw documentation locally",
+  "keywords": [
+    "openclaw",
+    "documentation",
+    "llm",
+    "ai-agent",
+    "cli",
+    "docs",
+    "search",
+    "fts5"
+  ],
+  "homepage": "https://github.com/kryptobaseddev/openclawdocs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kryptobaseddev/openclawdocs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kryptobaseddev/openclawdocs/issues"
+  },
+  "funding": {
+    "type": "ko-fi",
+    "url": "https://ko-fi.com/H2H815OTBU"
+  },
+  "license": "MIT",
+  "author": "kryptobaseddev",
+  "bin": {
+    "openclawdocs": "bin/openclawdocs.js",
+    "openclaw-docs": "bin/openclawdocs.js",
+    "ocdocs": "bin/openclawdocs.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "pyproject.toml",
+    "setup.sh",
+    "README.md",
+    "LICENSE",
+    "llms.txt"
+  ],
+  "scripts": {
+    "postinstall": "node bin/postinstall.js",
+    "test": "node bin/openclawdocs.js status"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ]
+}

@@ -1,0 +1,131 @@
+# openclawdocs
+
+CLI tool for LLM agents to sync, search, and browse OpenClaw documentation locally.
+
+> Source: https://github.com/kryptobaseddev/openclawdocs
+> Install: npm install -g openclawdocs
+> Requires: Python 3.12+, Node.js 18+
+
+## Setup
+
+```
+openclawdocs sync
+```
+
+First run downloads 370 topics from docs.openclaw.ai into local SQLite with FTS5 index.
+Subsequent runs are idempotent (ETag + content hash checks).
+Use `openclawdocs sync --force` to bypass cache.
+
+## Commands
+
+```
+openclawdocs sync [--force]          Download/update docs
+openclawdocs search <query> [-n N] [-v] [-c CAT]  FTS5+fuzzy search
+openclawdocs show <path> [--full] [--section NAME]  View topic
+openclawdocs list [-c CATEGORY]      Browse categories/topics
+openclawdocs status                  Sync health check
+openclawdocs diff                    Compare local vs remote
+```
+
+## Progressive Disclosure Protocol
+
+All output follows MVI (Minimum Viable Information). Request only what you need:
+
+```
+LEVEL 0 — SEARCH (120 tokens)
+  openclawdocs search "gateway authentication"
+  Returns: path, title, score per result
+
+LEVEL 1 — SUMMARY (150 tokens)
+  openclawdocs show gateway/authentication
+  Returns: title, category, word count, summary, section list
+
+LEVEL 2 — SECTION (500-1500 tokens)
+  openclawdocs show gateway/authentication --section "Troubleshooting"
+  Returns: content of one section only (fuzzy matched)
+
+LEVEL 3 — FULL (2K-15K tokens)
+  openclawdocs show gateway/authentication --full
+  Returns: complete topic markdown
+```
+
+## Search Output Format
+
+```
+[RANK] PATH                              TITLE                                   SCORE
+[1] gateway/authentication              Authentication                           0.96
+[2] gateway/trusted-proxy-auth          Trusted Proxy Auth                       0.70
+```
+
+Add -v for snippets:
+```
+[1] gateway/authentication              Authentication                           0.96
+    OpenClaw supports OAuth and API keys for model providers...
+```
+
+## Show Output Format (Default — Level 1)
+
+```
+# TITLE
+Category: CATEGORY | WORD_COUNT words | SOURCE_URL
+
+SUMMARY_TEXT
+
+## Sections (COUNT)
+- Section Name 1
+- Section Name 2
+- ...
+
+> openclawdocs show PATH --full
+```
+
+## Show Output Format (--section — Level 2)
+
+```
+# TITLE > SECTION_NAME
+Category: CATEGORY | Section of WORD_COUNT word topic
+
+SECTION_CONTENT_MARKDOWN
+```
+
+## Categories
+
+```
+automation channels cli concepts debug diagnostics
+gateway general help install nodes platforms
+plugins providers reference security start tools web
+```
+
+Use `openclawdocs list -c CATEGORY` to see topics within a category.
+
+## Agent Integration Pattern
+
+```
+1. openclawdocs status          — check if synced (run sync if not)
+2. openclawdocs search "TOPIC"  — find relevant page
+3. openclawdocs show PATH       — read summary + sections
+4. openclawdocs show PATH -s X  — read specific section if needed
+5. Only use --full as last resort
+```
+
+## Environment Variables
+
+```
+OPENCLAW_DOCS_DATA_DIR    Override data storage directory (default: ./data/)
+```
+
+## Data Sources
+
+```
+PRIMARY:    https://docs.openclaw.ai/llms-full.txt  (362 topics, pre-formatted markdown)
+SECONDARY:  https://docs.openclaw.ai/<path>          (8 topics, HTML via trafilatura)
+INDEX:      https://docs.openclaw.ai/llms.txt        (363 page index)
+```
+
+## Storage
+
+```
+data/docs.db          SQLite database with FTS5 index
+data/raw/             Cached llms.txt and llms-full.txt
+data/topics/CAT/      Individual topic markdown files
+```
