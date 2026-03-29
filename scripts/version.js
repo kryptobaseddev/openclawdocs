@@ -4,18 +4,21 @@
 /**
  * Version script: orchestrates changesets + VG for CalVer releases.
  *
- * Problem: Changesets applies semver bumps. VG handles CalVer.
- * Solution: Let changesets run first (consumes changeset files, writes
- * changelog), then VG overrides with correct CalVer and fixes formatting.
+ * Problem: Changesets applies semver bumps. VG's `bump --apply` auto-picks
+ * the wrong option in non-interactive CI (always picks option 1, which can
+ * downgrade the version).
+ *
+ * Solution: Calculate CalVer ourselves (always correct), use VG only for
+ * changelog fixing and file sync.
  *
  * Pipeline:
- * 1. changeset version  → Consume changesets into CHANGELOG (semver — will be overwritten)
- * 2. vg bump --apply    → Override with correct CalVer version in pyproject.toml
- *    (falls back to manual bump if vg bump fails — known VG bug #8)
- * 3. vg fix-changelog   → Repair changesets' CHANGELOG mangling
- * 4. vg sync            → Propagate CalVer to __init__.py, CHANGELOG
- * 5. package.json sync  → Set CalVer in package.json (VG regex can't distinguish keys)
- * 6. vg check           → Verify version is valid (not full validate — skips hooks)
+ * 1. changeset version  → Consume changesets into CHANGELOG
+ * 2. calcNextCalVer()   → Calculate correct YYYY.M.MICRO (always increments)
+ * 3. Set manifest       → Write to pyproject.toml
+ * 4. vg fix-changelog   → Repair changesets' CHANGELOG mangling
+ * 5. vg sync            → Propagate to __init__.py, CHANGELOG
+ * 6. Sync package.json  → Direct write (VG regex can't distinguish JSON keys)
+ * 7. vg check           → Verify version is valid CalVer
  */
 
 const { execFileSync } = require("child_process");
@@ -23,7 +26,6 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const IS_CI = !!process.env.CI;
 
 function run(cmd, args, { allowFail = false } = {}) {
   console.log(`  > ${cmd} ${args.join(" ")}`);
@@ -56,11 +58,10 @@ function syncPackageJson(version) {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
   pkg.version = version;
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
-  console.log(`  > package.json version set to ${version}`);
+  console.log(`  > package.json set to ${version}`);
 }
 
 function calcNextCalVer(current) {
-  // CalVer YYYY.M.MICRO — increment MICRO if same year.month, else new date
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -74,47 +75,35 @@ function calcNextCalVer(current) {
 }
 
 function main() {
-  console.log("version: Starting CalVer release pipeline...\n");
+  console.log("version: CalVer release pipeline\n");
 
-  // Step 1: Changesets consumes pending .changeset/*.md files
-  console.log("Step 1: Changesets (consume changesets into CHANGELOG)");
+  // Step 1: Changesets consumes .changeset/*.md files into CHANGELOG
+  console.log("Step 1: Consume changesets");
   run("npx", ["changeset", "version"]);
 
-  // Step 2: VG bump — try vg bump --apply, fall back to manual CalVer calc
-  // (vg bump --apply has a known bug writing to pyproject.toml — VG issue #8)
-  console.log("\nStep 2: VG bump (override with CalVer)");
-  const currentVersion = getManifestVersion() || "0.0.0";
-  try {
-    run("vg", ["bump", "--apply"]);
-  } catch (_) {
-    // Fallback: calculate CalVer ourselves
-    const next = calcNextCalVer(currentVersion);
-    console.log(`  > vg bump failed, falling back to manual CalVer: ${next}`);
-    setManifestVersion(next);
-  }
+  // Step 2: Calculate correct CalVer (don't trust vg bump in non-interactive)
+  const current = getManifestVersion() || "0.0.0";
+  const next = calcNextCalVer(current);
+  console.log(`\nStep 2: CalVer ${current} → ${next}`);
+  setManifestVersion(next);
 
   // Step 3: Fix changesets' CHANGELOG mangling
-  console.log("\nStep 3: VG fix-changelog");
+  console.log("\nStep 3: Fix changelog");
   run("vg", ["fix-changelog"], { allowFail: true });
 
-  // Step 4: VG sync to __init__.py and CHANGELOG
+  // Step 4: Sync to __init__.py, CHANGELOG
   console.log("\nStep 4: VG sync");
   run("vg", ["sync"]);
 
-  // Step 5: Sync package.json explicitly
-  const version = getManifestVersion();
-  if (!version) {
-    console.error("ERROR: Could not read version from pyproject.toml");
-    process.exit(1);
-  }
-  console.log(`\nStep 5: Sync package.json to ${version}`);
-  syncPackageJson(version);
+  // Step 5: Sync package.json
+  console.log("\nStep 5: Sync package.json");
+  syncPackageJson(next);
 
-  // Step 6: Validate — use `vg check` (not `vg validate`) to skip hooks check in CI
+  // Step 6: Verify
   console.log("\nStep 6: VG check");
   run("vg", ["check"]);
 
-  console.log("\nVersion pipeline complete.");
+  console.log(`\nDone: ${next}`);
 }
 
 main();
