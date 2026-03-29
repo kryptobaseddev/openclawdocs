@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.3.1
+
+### Patch Changes
+
+- Version correction: 2026.3.0 was the initial release, this is the first patch
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -7,7 +13,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
 
 ## [Unreleased]
 
-## [2026.3.0] - 2026-03-29
+## [2026.3.1] - 2026-03-29
 
 ### Added
 
@@ -27,8 +33,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
   - Changesets + VersionGuard CalVer release pipeline
   - GitHub Actions release workflow
 
-
-## [2026.3.0] - 2025-03-29
+## [2026.3.1] - 2025-03-29
 
 ### Added
 
