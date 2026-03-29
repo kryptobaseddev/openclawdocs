@@ -42,7 +42,14 @@
   ],
   "scripts": {
     "postinstall": "node bin/postinstall.js",
-    "test": "node bin/openclawdocs.js status"
+    "test": "node bin/openclawdocs.js status",
+    "changeset": "changeset",
+    "version": "node scripts/version.js",
+    "release": "npm run version && npm publish --access public"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.30.0",
+    "@codluv/versionguard": "^1.0.0"
   },
   "engines": {
     "node": ">=18"

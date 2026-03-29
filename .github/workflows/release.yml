@@ -2,19 +2,22 @@ name: Release
 
 on:
   push:
-    tags:
-      - "[0-9]*.[0-9]*.[0-9]*"
+    branches:
+      - main
 
 permissions:
   contents: write
+  pull-requests: write
   id-token: write
 
 jobs:
   release:
-    name: Build and Release
+    name: Changesets Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -25,36 +28,31 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verify version matches tag
-        env:
-          GIT_TAG: ${{ github.ref_name }}
-        run: |
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          PY_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          echo "Tag: $GIT_TAG"
-          echo "package.json: $PKG_VERSION"
-          echo "pyproject.toml: $PY_VERSION"
-          if [ "$GIT_TAG" != "$PKG_VERSION" ]; then
-            echo "ERROR: Tag does not match package.json"
-            exit 1
-          fi
-          if [ "$GIT_TAG" != "$PY_VERSION" ]; then
-            echo "ERROR: Tag does not match pyproject.toml"
-            exit 1
-          fi
+      - name: Install dependencies
+        run: npm install
 
-      - name: Verify Python package installs
-        run: |
-          python3 -m venv .test-venv
-          .test-venv/bin/pip install -e .
-          .test-venv/bin/python -c "from openclaw_docs.cli import cli; print('OK')"
-
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      # Changesets action:
+      # - If pending changesets exist: creates a "Version Package" PR
+      #   that runs `npm run version` (changeset version → vg bump → vg fix-changelog → vg sync)
+      # - If no pending changesets and version PR merged: runs `npm run release`
+      - name: Create Release PR or Publish
+        id: changesets
+        uses: changesets/action@v1
         with:
-          generate_release_notes: true
+          title: "chore: version package"
+          commit: "chore: version package"
+          version: npm run version
+          publish: npm run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # After publish, tag with VG and create GitHub release
+      - name: Tag and Release
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          vg tag "$VERSION" --yes
+          git push --tags
