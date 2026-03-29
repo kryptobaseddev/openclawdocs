@@ -1,9 +1,14 @@
-"""Parse llms.txt and llms-full.txt into structured data."""
+"""Parse llms.txt and llms-full.txt into structured data.
+
+Uses markdown-it-py for AST-based section extraction instead of fragile regex.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import re
+
+from markdown_it import MarkdownIt
 
 from openclaw_docs.models import IndexEntry, Topic
 
@@ -17,6 +22,9 @@ _SECTION_PATTERN = re.compile(
 )
 
 _DOCS_BASE = "https://docs.openclaw.ai/"
+
+# Shared markdown-it parser instance (stateless, safe to reuse)
+_md = MarkdownIt()
 
 
 def _path_from_url(url: str) -> str:
@@ -33,6 +41,50 @@ def _category_and_slug(path: str) -> tuple[str, str]:
     if len(parts) >= 2:
         return parts[0], parts[-1]
     return "general", parts[0]
+
+
+def extract_sections(content: str) -> list[str]:
+    """Extract ## heading titles from markdown using AST parsing.
+
+    Uses markdown-it-py token stream to correctly identify headings,
+    ignoring headings inside code blocks or other non-heading contexts.
+    """
+    tokens = _md.parse(content)
+    sections = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.type == "heading_open" and tok.tag == "h2":
+            # The next token is heading content (inline)
+            if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
+                heading_text = tokens[i + 1].content.strip()
+                if heading_text:
+                    sections.append(heading_text)
+        i += 1
+    return sections
+
+
+def generate_summary(content: str) -> str:
+    """Extract first meaningful paragraph as summary (<=200 chars).
+
+    Uses markdown-it-py AST to find the first paragraph token,
+    skipping headings, code blocks, and component tags.
+    """
+    tokens = _md.parse(content)
+    for i, tok in enumerate(tokens):
+        if tok.type == "paragraph_open":
+            # Next token should be inline content
+            if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
+                text = tokens[i + 1].content.strip()
+                # Skip Mintlify MDX component lines
+                if text.startswith("<") and not text.startswith("<a"):
+                    continue
+                if not text:
+                    continue
+                if len(text) > 200:
+                    text = text[:197] + "..."
+                return text
+    return ""
 
 
 def parse_index(content: str) -> list[IndexEntry]:
@@ -54,7 +106,14 @@ def parse_index(content: str) -> list[IndexEntry]:
 
 
 def parse_full_content(content: str) -> list[Topic]:
-    """Parse llms-full.txt into individual Topic objects."""
+    """Parse llms-full.txt into individual Topic objects.
+
+    The llms-full.txt format uses section boundaries of:
+        # Title
+        Source: https://docs.openclaw.ai/path
+
+    Each section's content runs until the next boundary or EOF.
+    """
     matches = list(_SECTION_PATTERN.finditer(content))
     if not matches:
         return []
@@ -78,15 +137,12 @@ def parse_full_content(content: str) -> list[Topic]:
         path = _path_from_url(source_url)
         category, slug = _category_and_slug(path)
 
-        # Extract ## headings for section list
-        sections = re.findall(r"^## (.+)$", section_content, re.MULTILINE)
-
-        # Compute content hash
-        content_hash = hashlib.sha256(section_content.encode("utf-8")).hexdigest()
-
-        word_count = len(section_content.split())
-
+        # AST-based section and summary extraction
+        sections = extract_sections(section_content)
         summary = generate_summary(section_content)
+
+        content_hash = hashlib.sha256(section_content.encode("utf-8")).hexdigest()
+        word_count = len(section_content.split())
 
         topics.append(Topic(
             title=title,
@@ -102,40 +158,3 @@ def parse_full_content(content: str) -> list[Topic]:
         ))
 
     return topics
-
-
-def generate_summary(content: str) -> str:
-    """Extract first meaningful paragraph as summary (<=200 chars)."""
-    lines = content.split("\n")
-    paragraph: list[str] = []
-    in_paragraph = False
-
-    for line in lines:
-        stripped = line.strip()
-        # Skip headings
-        if stripped.startswith("#"):
-            if in_paragraph:
-                break
-            continue
-        # Skip code blocks
-        if stripped.startswith("```"):
-            if in_paragraph:
-                break
-            continue
-        # Blank line ends a paragraph
-        if not stripped:
-            if in_paragraph:
-                break
-            continue
-        # Skip Mintlify components
-        if stripped.startswith("<") and not stripped.startswith("<a"):
-            if in_paragraph:
-                break
-            continue
-        in_paragraph = True
-        paragraph.append(stripped)
-
-    summary = " ".join(paragraph)
-    if len(summary) > 200:
-        summary = summary[:197] + "..."
-    return summary

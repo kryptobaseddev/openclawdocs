@@ -1,9 +1,10 @@
 """Direct page scraper for docs missing from llms-full.txt.
 
+Uses trafilatura for high-accuracy content extraction (F1 0.958).
 The llms-full.txt dump covers ~362 pages, but the Mintlify docs.json
 navigation lists ~640+ pages. Most of the gap is i18n translations
 (zh-CN, ja-JP) which we skip. The remaining ~20 English pages are
-fetched individually and parsed into Topics.
+fetched individually via httpx and extracted via trafilatura.
 """
 
 from __future__ import annotations
@@ -11,14 +12,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from html.parser import HTMLParser
 from pathlib import Path
 
 import httpx
+import trafilatura
 
 from openclaw_docs.config import DOCS_BASE_URL
 from openclaw_docs.models import Topic
-from openclaw_docs.parser import generate_summary
+from openclaw_docs.parser import generate_summary, extract_sections
 
 # Paths to skip (i18n, non-content)
 _SKIP_PREFIXES = ("zh-CN/", "ja-JP/", "api-reference/")
@@ -30,164 +31,35 @@ _DOCS_JSON_CANDIDATES = [
     Path("/mnt/projects/openclaw/docs/docs.json"),
 ]
 
-
-class _ContentExtractor(HTMLParser):
-    """Extract article content from Mintlify HTML, converting to markdown.
-
-    Targets the prose div (class containing 'prose' + data-page-title attr)
-    which is Mintlify's main content area. Ignores all chrome (nav, header,
-    footer, sidebar).
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._result: list[str] = []
-        self._skip_tags = {"script", "style", "noscript"}
-        self._in_skip = 0
-        self._in_prose = False
-        self._prose_depth = 0
-        self._tag_stack: list[str] = []
-        self._page_title: str = ""
-        # Skip anchor wrapper divs inside headings (Mintlify navigation anchors)
-        self._in_heading_anchor = False
-        self._in_heading = False
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attr_dict = dict(attrs)
-
-        if tag in self._skip_tags:
-            self._in_skip += 1
-            return
-
-        # Detect the Mintlify prose content div
-        cls = attr_dict.get("class", "")
-        if tag == "div" and "prose" in cls and attr_dict.get("data-page-title"):
-            self._in_prose = True
-            self._prose_depth = 1
-            self._page_title = attr_dict["data-page-title"]
-            return
-
-        # Track div nesting while in prose
-        if self._in_prose and tag == "div":
-            self._prose_depth += 1
-
-        if not self._in_prose:
-            return
-
-        self._tag_stack.append(tag)
-
-        # Skip the absolute-positioned anchor div inside headings
-        if tag == "div" and "absolute" in cls:
-            self._in_heading_anchor = True
-            return
-        if tag == "a" and self._in_heading_anchor:
-            return
-
-        # Convert HTML to markdown
-        if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
-            level = int(tag[1])
-            self._result.append(f"\n\n{'#' * level} ")
-            self._in_heading = True
-        elif tag == "p":
-            self._result.append("\n\n")
-        elif tag == "li":
-            self._result.append("\n- ")
-        elif tag == "br":
-            self._result.append("\n")
-        elif tag == "code":
-            if "pre" not in self._tag_stack:
-                self._result.append("`")
-        elif tag == "pre":
-            lang = ""
-            if cls:
-                m = re.search(r"language-(\w+)", cls)
-                if m:
-                    lang = m.group(1)
-            self._result.append(f"\n\n```{lang}\n")
-        elif tag == "a" and not self._in_heading_anchor and not self._in_heading:
-            self._result.append("[")
-        elif tag in ("strong", "b"):
-            self._result.append("**")
-        elif tag in ("em", "i"):
-            self._result.append("*")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in self._skip_tags:
-            self._in_skip = max(0, self._in_skip - 1)
-            return
-
-        if self._in_prose and tag == "div":
-            self._prose_depth -= 1
-            if self._prose_depth <= 0:
-                self._in_prose = False
-                return
-            # End of heading anchor div
-            if self._in_heading_anchor:
-                self._in_heading_anchor = False
-                return
-
-        if not self._in_prose:
-            return
-
-        if self._tag_stack and self._tag_stack[-1] == tag:
-            self._tag_stack.pop()
-
-        if tag == "pre":
-            self._result.append("\n```\n")
-        elif tag == "code" and "pre" not in self._tag_stack:
-            self._result.append("`")
-        elif tag in ("strong", "b"):
-            self._result.append("**")
-        elif tag in ("em", "i"):
-            self._result.append("*")
-        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
-            self._result.append("\n")
-            self._in_heading = False
-        elif tag == "a" and not self._in_heading_anchor and not self._in_heading:
-            # We don't track href for simplicity — just close the link text
-            self._result.append("]")
-
-    def handle_data(self, data: str) -> None:
-        if self._in_skip > 0 or not self._in_prose or self._in_heading_anchor:
-            return
-        self._result.append(data)
-
-    def get_content(self) -> str:
-        raw = "".join(self._result)
-        # Clean up excessive whitespace and zero-width chars
-        raw = raw.replace("\u200b", "")  # zero-width space from Mintlify anchors
-        raw = re.sub(r"\n{3,}", "\n\n", raw)
-        return raw.strip()
-
-    def get_title(self) -> str:
-        return self._page_title
+# Page title regex for Mintlify HTML data-page-title attribute
+_PAGE_TITLE_RE = re.compile(r'data-page-title="([^"]+)"')
 
 
-def _extract_markdown_from_html(html: str) -> tuple[str, str]:
-    """Extract content from Mintlify HTML page.
+def _extract_page_title(html: str) -> str:
+    """Extract the data-page-title from Mintlify HTML."""
+    match = _PAGE_TITLE_RE.search(html)
+    return match.group(1) if match else ""
+
+
+def extract_content(html: str) -> tuple[str, str]:
+    """Extract markdown content and title from HTML using trafilatura.
 
     Returns (content_markdown, page_title).
-    Uses the prose div with data-page-title as the content boundary.
-    Falls back to full-page extraction if prose div not found.
+    Uses httpx for fetching (handles redirects), trafilatura for extraction.
     """
-    parser = _ContentExtractor()
-    parser.feed(html)
-    content = parser.get_content()
-    title = parser.get_title()
+    title = _extract_page_title(html)
 
-    # If prose extraction found nothing, fall back to regex extraction
+    content = trafilatura.extract(
+        html,
+        output_format="markdown",
+        include_links=True,
+        include_tables=True,
+        include_images=False,
+        no_fallback=False,
+    )
+
     if not content:
-        # Try extracting between the prose div boundaries with regex
-        match = re.search(
-            r'<div[^>]*class="[^"]*prose[^"]*"[^>]*data-page-title="([^"]+)"[^>]*>(.*?)(?=<footer|</body)',
-            html, re.DOTALL,
-        )
-        if match:
-            title = match.group(1)
-            raw_html = match.group(2)
-            # Strip all HTML tags for a basic text extraction
-            content = re.sub(r"<[^>]+>", " ", raw_html)
-            content = re.sub(r"\s+", " ", content).strip()
+        return "", title
 
     return content, title
 
@@ -244,7 +116,7 @@ def find_missing_pages(known_paths: set[str]) -> list[str]:
 
 
 def scrape_page(client: httpx.Client, page_path: str) -> Topic | None:
-    """Fetch a single page and convert to a Topic.
+    """Fetch a single page and extract content with trafilatura.
 
     Returns None if the page doesn't exist (404) or can't be parsed.
     """
@@ -257,11 +129,11 @@ def scrape_page(client: httpx.Client, page_path: str) -> Topic | None:
     except httpx.HTTPError:
         return None
 
-    content, page_title = _extract_markdown_from_html(resp.text)
+    content, page_title = extract_content(resp.text)
     if not content or len(content) < 50:
         return None
 
-    # Use title from data-page-title attr, fall back to first heading, then slug
+    # Use title from data-page-title, fall back to first heading, then slug
     if page_title:
         title = page_title
     else:
@@ -275,7 +147,7 @@ def scrape_page(client: httpx.Client, page_path: str) -> Topic | None:
     else:
         category, slug = "general", parts[0]
 
-    sections = re.findall(r"^## (.+)$", content, re.MULTILINE)
+    sections = extract_sections(content)
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     word_count = len(content.split())
     summary = generate_summary(content)
