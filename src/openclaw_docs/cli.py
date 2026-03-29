@@ -162,6 +162,7 @@ def show(ctx: click.Context, topic_path: str, full: bool, section: str | None,
 
     if use_json:
         content = storage.get_topic_content(topic_path, topics_dir)
+        related = display.extract_related(content, topic["path"]) if content else []
         data: dict = {
             "type": "show",
             "path": topic["path"],
@@ -171,6 +172,7 @@ def show(ctx: click.Context, topic_path: str, full: bool, section: str | None,
             "url": topic["source_url"],
             "summary": topic.get("summary", ""),
             "sections": sections_list,
+            "related": related,
         }
         if code_only and content:
             from openclaw_docs.cleaner import extract_code_blocks
@@ -207,7 +209,8 @@ def show(ctx: click.Context, topic_path: str, full: bool, section: str | None,
         else:
             click.echo(display.fmt_topic_summary(topic))
     else:
-        click.echo(display.fmt_topic_summary(topic))
+        content = storage.get_topic_content(topic_path, topics_dir)
+        click.echo(display.fmt_topic_summary(topic, content))
 
 
 @cli.command(name="list")

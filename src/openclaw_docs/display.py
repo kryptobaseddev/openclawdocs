@@ -49,6 +49,13 @@ def fmt_search_results(results: list[SearchResult], verbose: bool = False) -> st
     return "\n".join(lines)
 
 
+def extract_related(content: str, self_path: str) -> list[str]:
+    """Extract internal cross-reference paths from topic content."""
+    import re
+    links = re.findall(r"\(/([a-z][a-z0-9_/-]+)\)", content)
+    return sorted(set(p for p in links if p != self_path))
+
+
 def fmt_topic_summary(topic: dict, content: str | None = None) -> str:
     """Format topic with progressive disclosure Level 1 (default)."""
     sections = json.loads(topic["sections"]) if isinstance(topic["sections"], str) else topic["sections"]
@@ -71,7 +78,15 @@ def fmt_topic_summary(topic: dict, content: str | None = None) -> str:
             lines.append(f"- {s}")
         lines.append("")
 
-    lines.append(f"> openclaw-docs show {topic['path']} --full")
+    if content:
+        related = extract_related(content, topic["path"])
+        if related:
+            lines.append(f"## Related ({len(related)})")
+            for r in related:
+                lines.append(f"- {r}")
+            lines.append("")
+
+    lines.append(f"> ocdocs show {topic['path']} --full")
     return "\n".join(lines)
 
 
