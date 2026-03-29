@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - uses: actions/setup-python@v5
@@ -35,8 +35,8 @@ jobs:
       # - If pending changesets: creates a "Version Package" PR
       # - If version PR just merged (no pending changesets): publishes
       #
-      # version: runs locally via `npm run version` (changeset → vg bump → sync)
-      # publish: just `npm publish` — version is already correct from the PR
+      # version: runs via `npm run version` (changeset → vg bump → sync)
+      # publish: npm publish with OIDC provenance (no NPM_TOKEN needed)
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@v1
@@ -44,10 +44,9 @@ jobs:
           title: "chore: version package"
           commit: "chore: version package"
           version: npm run version
-          publish: npm publish --access public
+          publish: npm publish --access public --provenance
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         if: steps.changesets.outputs.published == 'true'
