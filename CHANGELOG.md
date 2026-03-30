@@ -7,7 +7,14 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
 
 ## [Unreleased]
 
-## [2026.3.3] - 2026-03-29
+## [2026.3.4] - 2026-03-29
+
+### Fixed
+
+- Switch @codluv/versionguard from git ref to npm ^1.1.0
+
+
+## [2026.3.4] - 2026-03-29
 
 ### Fixed
 
@@ -18,8 +25,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
   - version.js simplified: only calcNextCalVer workaround remains (VG #9)
   - Updated @codluv/versionguard to 1.1.0
 
-
-## [2026.3.3] - 2026-03-29
+## [2026.3.4] - 2026-03-29
 
 ### Fixed
 
@@ -44,7 +50,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
 
 - Version correction: 2026.3.0 was the initial release, this is the first patch
 
-## [2026.3.3] - 2026-03-29
+## [2026.3.4] - 2026-03-29
 
 ### Added
 
@@ -64,7 +70,7 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.M.MICRO`).
   - Changesets + VersionGuard CalVer release pipeline
   - GitHub Actions release workflow
 
-## [2026.3.3] - 2025-03-29
+## [2026.3.4] - 2025-03-29
 
 ### Added
 
