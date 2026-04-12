@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "click>=8.3",
     "httpx>=0.28",
-    "rapidfuzz>=3.14",
+    "rapidfuzz>=3.14.5",
     "trafilatura>=2.0",
     "markdown-it-py>=4.0",
     "platformdirs>=4.9",
