@@ -13,7 +13,7 @@ dependencies = [
     "rapidfuzz>=3.14",
     "trafilatura>=2.0",
     "markdown-it-py>=4.0",
-    "platformdirs>=4.9",
+    "platformdirs>=4.9.6",
 ]
 
 [project.scripts]
