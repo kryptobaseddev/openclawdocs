@@ -127,6 +127,14 @@ ocdocs sync
 
 Requires Python 3.12+. The postinstall script creates a Python venv and installs everything automatically.
 
+If your system `python3` points to an older version, set one of these before install:
+
+```bash
+OPENCLAWDOCS_PYTHON=$(command -v python3.12) npm install -g openclawdocs
+# or
+PYTHON=$(command -v python3.12) npm install -g openclawdocs
+```
+
 Three aliases work interchangeably: `ocdocs`, `openclawdocs`, `openclaw-docs`
 
 ### pip (manual)

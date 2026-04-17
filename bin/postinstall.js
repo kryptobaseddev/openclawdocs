@@ -12,15 +12,26 @@ const PIP = IS_WIN
   ? path.join(VENV, "Scripts", "pip.exe")
   : path.join(VENV, "bin", "pip");
 
+function isSupportedPython(cmd) {
+  try {
+    const v = execFileSync(cmd, ["--version"], { encoding: "utf8" }).trim();
+    const match = v.match(/Python (\d+)\.(\d+)/);
+    return !!(match && parseInt(match[1]) >= 3 && parseInt(match[2]) >= 12);
+  } catch (_) {
+    return false;
+  }
+}
+
 function findPython() {
-  for (const cmd of ["python3", "python"]) {
-    try {
-      const v = execFileSync(cmd, ["--version"], { encoding: "utf8" }).trim();
-      const match = v.match(/Python (\d+)\.(\d+)/);
-      if (match && parseInt(match[1]) >= 3 && parseInt(match[2]) >= 12) {
-        return cmd;
-      }
-    } catch (_) {}
+  const explicit = process.env.OPENCLAWDOCS_PYTHON || process.env.PYTHON;
+  if (explicit && isSupportedPython(explicit)) {
+    return explicit;
+  }
+
+  for (const cmd of ["python3.13", "python3.12", "python3", "python"]) {
+    if (isSupportedPython(cmd)) {
+      return cmd;
+    }
   }
   return null;
 }
@@ -30,6 +41,7 @@ function main() {
   if (!python) {
     console.error("openclawdocs: Python 3.12+ is required but not found.");
     console.error("Install Python 3.12+ and re-run: npm run postinstall");
+    console.error("You can also set OPENCLAWDOCS_PYTHON=/path/to/python3.12");
     process.exit(1);
   }
 
@@ -55,7 +67,7 @@ function main() {
     : path.join(VENV, "bin", "python");
   console.log("openclawdocs: Downloading documentation (first sync)...");
   try {
-    execFileSync(PYTHON_BIN, ["-m", "openclaw_docs.cli", "sync"], {
+    execFileSync(PYTHON_BIN, ["-m", "openclaw_docs", "sync"], {
       stdio: "inherit",
       cwd: ROOT,
     });
