@@ -29,19 +29,22 @@ class SearchEngine:
         category: str | None = None,
         include_snippets: bool = False,
     ) -> list[SearchResult]:
-        """Combined FTS5 BM25 + fuzzy title search."""
+        """Combined path + FTS5 BM25 + fuzzy title search."""
         if not query.strip():
             return []
 
         # Strategy 1: FTS5 BM25 (primary — full content search)
         fts_results = self.storage.fts_search(query, limit=limit * 3)
 
+        # Strategy 1b: Exact-ish path/slug/category matching for common agent queries
+        path_results = self._path_search(query, limit=limit * 2)
+
         # Strategy 2: Fuzzy title match (secondary — typo tolerance only)
         # High cutoff (75%) to avoid "discord" matching "discovery"
         fuzzy_results = self._fuzzy_search(query, limit=limit)
 
-        # Merge with FTS5 dominant
-        merged = self._merge_results(fts_results, fuzzy_results, query)
+        # Merge with FTS5 dominant, but preserve strong path/title intent.
+        merged = self._merge_results(fts_results, fuzzy_results, path_results, query)
 
         if category:
             merged = [r for r in merged if r.category == category]
@@ -68,26 +71,71 @@ class SearchEngine:
             query, title_list, scorer=fuzz.WRatio, limit=limit, score_cutoff=75.0
         )
 
+        query_norm = query.lower().strip()
         results = []
         for title, score, _idx in matches:
             path = path_map[title]
             category = path.split("/")[0] if "/" in path else "general"
+            match_type = "title"
+            if query_norm == title.lower().strip():
+                score = max(score, 100.0)
+                match_type = "exact-title"
             results.append(SearchResult(
                 title=title,
                 path=path,
                 category=category,
                 score=round(score / 100.0, 2),
-                match_type="title",
+                match_type=match_type,
             ))
         return results
+
+    def _path_search(self, query: str, limit: int = 10) -> list[SearchResult]:
+        """Exact-ish path/slug/category matching for agent-oriented queries."""
+        q = query.lower().strip()
+        if not q:
+            return []
+
+        results = []
+        for topic in self.storage.list_topics():
+            path = topic["path"]
+            title = topic["title"]
+            category = topic["category"]
+            slug = path.split("/")[-1]
+            score = None
+            match_type = "path"
+
+            if q == path.lower():
+                score = 1.0
+                match_type = "exact-path"
+            elif q == slug.lower() or q == category.lower():
+                score = 0.95
+                match_type = "exact-slug"
+            elif path.lower().startswith(q + "/") or path.lower().endswith("/" + q):
+                score = 0.9
+                match_type = "path-prefix"
+            elif q in path.lower() or q in title.lower():
+                score = 0.75
+
+            if score is not None:
+                results.append(SearchResult(
+                    title=title,
+                    path=path,
+                    category=category,
+                    score=score,
+                    match_type=match_type,
+                ))
+
+        results.sort(key=lambda r: (-r.score, len(r.path), r.title.lower()))
+        return results[:limit]
 
     def _merge_results(
         self,
         fts_results: list[SearchResult],
         fuzzy_results: list[SearchResult],
+        path_results: list[SearchResult],
         query: str,
     ) -> list[SearchResult]:
-        """Merge results. FTS5 dominates (0.7 weight), fuzzy supplements (0.3)."""
+        """Merge results. FTS5 dominates, with strong boosts for exact agent intent."""
         scored: dict[str, SearchResult] = {}
 
         # Normalize FTS5 scores relative to the best hit
@@ -102,19 +150,40 @@ class SearchEngine:
                 match_type="content",
             )
 
+        # Add exact-ish path/title intent, heavily weighted for agent workflows.
+        for r in path_results:
+            path_contrib = round(r.score * 0.8, 3)
+            if r.path in scored:
+                scored[r.path].score = round(max(scored[r.path].score, path_contrib), 3)
+                if scored[r.path].match_type == "content":
+                    scored[r.path].match_type = r.match_type + "+content"
+            else:
+                scored[r.path] = SearchResult(
+                    title=r.title,
+                    path=r.path,
+                    category=r.category,
+                    score=path_contrib,
+                    match_type=r.match_type,
+                )
+
         # Add fuzzy (only high-confidence title matches)
         for r in fuzzy_results:
             fuzzy_contrib = round(r.score * 0.3, 3)
             if r.path in scored:
-                scored[r.path].score = round(scored[r.path].score + fuzzy_contrib, 3)
-                scored[r.path].match_type = "title+content"
+                scored[r.path].score = round(max(scored[r.path].score, scored[r.path].score + fuzzy_contrib), 3)
+                if "content" in scored[r.path].match_type:
+                    scored[r.path].match_type = "title+content"
+                elif scored[r.path].match_type.startswith("exact") or scored[r.path].match_type.startswith("path"):
+                    scored[r.path].match_type = scored[r.path].match_type + "+title"
+                else:
+                    scored[r.path].match_type = "title"
             else:
                 scored[r.path] = SearchResult(
                     title=r.title,
                     path=r.path,
                     category=r.category,
                     score=fuzzy_contrib,
-                    match_type="title",
+                    match_type=r.match_type,
                 )
 
         # Category boost

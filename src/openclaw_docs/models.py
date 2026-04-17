@@ -62,3 +62,9 @@ class SyncStatus:
     index_entries: int = 0
     db_size_bytes: int = 0
     data_dir: str = ""
+    age_seconds: int | None = None
+    stale_after_hours: int = 24
+    is_stale: bool = False
+    age_seconds: int | None = None
+    stale_after_hours: int = 24
+    is_stale: bool = False

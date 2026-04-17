@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from openclaw_docs.models import IndexEntry, SearchResult, SyncStatus, Topic
@@ -282,6 +282,13 @@ class DocsStorage:
     def get_status(self, data_dir: Path) -> SyncStatus:
         last_sync_str = self.get_meta("last_sync_time")
         last_sync = datetime.fromisoformat(last_sync_str) if last_sync_str else None
+        stale_after_hours = 24
+        age_seconds = None
+        is_stale = False
+        if last_sync:
+            age = datetime.now(timezone.utc) - last_sync
+            age_seconds = max(0, int(age.total_seconds()))
+            is_stale = age > timedelta(hours=stale_after_hours)
 
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
 
@@ -292,4 +299,7 @@ class DocsStorage:
             index_entries=self.count_index_entries(),
             db_size_bytes=db_size,
             data_dir=str(data_dir),
+            age_seconds=age_seconds,
+            stale_after_hours=stale_after_hours,
+            is_stale=is_stale,
         )
