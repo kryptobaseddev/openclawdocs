@@ -28,7 +28,7 @@ function main() {
   ensureVenv();
   const args = process.argv.slice(2);
   try {
-    execFileSync(PYTHON, ["-m", "openclaw_docs.cli", ...args], {
+    execFileSync(PYTHON, ["-m", "openclaw_docs", ...args], {
       stdio: "inherit",
       cwd: ROOT,
     });
