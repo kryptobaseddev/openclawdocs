@@ -44,6 +44,16 @@ def _out(data: object, use_json: bool) -> None:
         click.echo(json_mod.dumps(data, default=str))
 
 
+def _freshness_payload(storage: DocsStorage, data_dir: Path) -> dict:
+    stat = storage.get_status(data_dir)
+    return {
+        "last_sync": stat.last_sync,
+        "age_seconds": stat.age_seconds,
+        "stale_after_hours": stat.stale_after_hours,
+        "is_stale": stat.is_stale,
+    }
+
+
 @click.group()
 @click.option("--data-dir", type=click.Path(), envvar="OPENCLAW_DOCS_DATA_DIR",
               default=None, help="Override data directory path")
@@ -72,7 +82,8 @@ def sync(ctx: click.Context, force: bool, use_json: bool) -> None:
     if use_json:
         _out({"type": "sync", "added": report.added, "updated": report.updated,
               "removed": report.removed, "unchanged": report.unchanged,
-              "total": report.total, "errors": report.errors}, True)
+              "total": report.total, "errors": report.errors,
+              "freshness": _freshness_payload(storage, ctx.obj["data_dir"])}, True)
     else:
         click.echo(display.fmt_sync_report(report))
 
@@ -96,7 +107,8 @@ def search(ctx: click.Context, query: str, limit: int, verbose: bool,
 
     if not results:
         if use_json:
-            _out({"type": "search", "query": query, "results": [], "total": 0}, True)
+            _out({"type": "search", "query": query, "results": [], "total": 0,
+                  "freshness": _freshness_payload(storage, ctx.obj["data_dir"])}, True)
         else:
             click.echo("No results found.")
         raise SystemExit(EXIT_NOT_FOUND)
@@ -104,9 +116,10 @@ def search(ctx: click.Context, query: str, limit: int, verbose: bool,
     if use_json:
         _out({"type": "search", "query": query, "results": [
             {"rank": i, "path": r.path, "title": r.title, "score": r.score,
-             "snippet": r.snippet or None}
+             "snippet": r.snippet or None, "match_type": r.match_type}
             for i, r in enumerate(results, 1)
-        ], "total": len(results)}, True)
+        ], "total": len(results),
+        "freshness": _freshness_payload(storage, ctx.obj["data_dir"])}, True)
     elif compact:
         for r in results:
             click.echo(f"{r.path}\t{r.title}\t{r.score:.2f}")
@@ -173,6 +186,7 @@ def show(ctx: click.Context, topic_path: str, full: bool, section: str | None,
             "summary": topic.get("summary", ""),
             "sections": sections_list,
             "related": related,
+            "freshness": _freshness_payload(storage, ctx.obj["data_dir"]),
         }
         if code_only and content:
             from openclaw_docs.cleaner import extract_code_blocks
@@ -228,13 +242,15 @@ def list_cmd(ctx: click.Context, category: str | None, use_json: bool, compact: 
             topics = storage.list_topics(category=category)
             _out({"type": "list", "category": category,
                   "topics": [{"path": t["path"], "title": t["title"]} for t in topics],
-                  "count": len(topics)}, True)
+                  "count": len(topics),
+                  "freshness": _freshness_payload(storage, ctx.obj["data_dir"])}, True)
         else:
             categories = storage.list_categories()
             _out({"type": "list",
                   "categories": [{"name": c, "count": n} for c, n in categories],
                   "total_topics": sum(n for _, n in categories),
-                  "total_categories": len(categories)}, True)
+                  "total_categories": len(categories),
+                  "freshness": _freshness_payload(storage, ctx.obj["data_dir"])}, True)
     elif compact:
         if category:
             for t in storage.list_topics(category=category):
@@ -260,7 +276,9 @@ def status(ctx: click.Context, use_json: bool) -> None:
         _out({"type": "status", "last_sync": stat.last_sync,
               "topics": stat.total_topics, "categories": stat.total_categories,
               "index_entries": stat.index_entries, "db_size_kb": stat.db_size_bytes / 1024,
-              "data_dir": stat.data_dir}, True)
+              "data_dir": stat.data_dir, "age_seconds": stat.age_seconds,
+              "stale_after_hours": stat.stale_after_hours,
+              "is_stale": stat.is_stale}, True)
     else:
         click.echo(display.fmt_status(stat))
 
@@ -297,6 +315,7 @@ def diff(ctx: click.Context, use_json: bool) -> None:
     if use_json:
         _out({"type": "diff", "added": added, "changed": changed, "removed": removed,
               "counts": {"added": len(added), "changed": len(changed), "removed": len(removed)},
-              "up_to_date": not added and not changed and not removed}, True)
+              "up_to_date": not added and not changed and not removed,
+              "freshness": _freshness_payload(storage, ctx.obj["data_dir"])}, True)
     else:
         click.echo(display.fmt_diff(added, changed, removed))
