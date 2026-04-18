@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openclaw-docs"
-version = "2026.3.4"
+version = "2026.4.0"
 description = "LLM-agent-optimized CLI for OpenClaw documentation"
 requires-python = ">=3.12"
 dependencies = [
