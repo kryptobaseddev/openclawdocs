@@ -21,5 +21,5 @@ jobs:
       - run: npm install
 
       - name: Check for changeset
-        if: github.actor != 'app/dependabot'
+        if: '!contains(github.actor, ''dependabot'')'
         run: npx changeset status --since=origin/main
