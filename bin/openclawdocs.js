@@ -1,16 +1,13 @@
 #!/usr/bin/env node
 "use strict";
 
-const { execFileSync, execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 
 const ROOT = path.resolve(__dirname, "..");
 const VENV = path.join(ROOT, ".venv");
 const IS_WIN = process.platform === "win32";
-const PIP = IS_WIN
-  ? path.join(VENV, "Scripts", "pip.exe")
-  : path.join(VENV, "bin", "pip");
 const PYTHON = IS_WIN
   ? path.join(VENV, "Scripts", "python.exe")
   : path.join(VENV, "bin", "python");

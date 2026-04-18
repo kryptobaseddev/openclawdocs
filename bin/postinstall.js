@@ -28,7 +28,7 @@ function findPython() {
     return explicit;
   }
 
-  for (const cmd of ["python3.13", "python3.12", "python3", "python"]) {
+  for (const cmd of ["python3.13", "python3.12", "python3", "python", "py"]) {
     if (isSupportedPython(cmd)) {
       return cmd;
     }
