@@ -19,9 +19,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Node 24 ships npm >= 11.5.1, which is required for npm Trusted
+      # Publishing registry auth. npm 10.x (Node 22) only signs Sigstore
+      # provenance -- it cannot authenticate to the registry via OIDC,
+      # causing a misleading 404 PUT on publish.
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - uses: actions/setup-python@v6
@@ -39,8 +43,7 @@ jobs:
       # publish: bash .github/scripts/publish.sh -- skips if version
       #   already on npm (prevents noisy failures on non-release commits),
       #   otherwise runs `npm publish --access public --provenance`.
-      #   Auth: NPM_TOKEN if configured, else OIDC (requires Trusted
-      #   Publisher configured for this repo on npmjs.org).
+      #   Auth: OIDC via npm Trusted Publishing (no NPM_TOKEN needed).
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@v1
@@ -51,7 +54,6 @@ jobs:
           publish: bash .github/scripts/publish.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         if: steps.changesets.outputs.published == 'true'
