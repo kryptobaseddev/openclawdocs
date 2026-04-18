@@ -35,8 +35,12 @@ jobs:
       # - If pending changesets: creates a "Version Package" PR
       # - If version PR just merged (no pending changesets): publishes
       #
-      # version: runs via `npm run version` (changeset → vg bump → sync)
-      # publish: npm publish with OIDC provenance (no NPM_TOKEN needed)
+      # version: runs via `npm run version` (changeset -> vg bump -> sync)
+      # publish: bash .github/scripts/publish.sh -- skips if version
+      #   already on npm (prevents noisy failures on non-release commits),
+      #   otherwise runs `npm publish --access public --provenance`.
+      #   Auth: NPM_TOKEN if configured, else OIDC (requires Trusted
+      #   Publisher configured for this repo on npmjs.org).
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@v1
@@ -44,9 +48,10 @@ jobs:
           title: "chore: version package"
           commit: "chore: version package"
           version: npm run version
-          publish: npm publish --access public --provenance
+          publish: bash .github/scripts/publish.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         if: steps.changesets.outputs.published == 'true'
@@ -56,4 +61,4 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           git tag "v${VERSION}" || true
           git push --tags || true
-          gh release create "v${VERSION}" --title "v${VERSION}" --generate-release-notes || true
+          gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes || true
