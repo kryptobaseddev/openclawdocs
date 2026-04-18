@@ -21,4 +21,5 @@ jobs:
       - run: npm install
 
       - name: Check for changeset
+        if: github.actor != 'dependabot[bot]'
         run: npx changeset status --since=origin/main
