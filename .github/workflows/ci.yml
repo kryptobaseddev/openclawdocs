@@ -20,9 +20,6 @@ jobs:
 
       - run: npm install
 
-      - name: Debug actor
-        run: echo "Actor is ${{ github.actor }}"
-
       - name: Check for changeset
-        if: "github.actor != 'dependabot[bot]' && github.actor != 'app/dependabot'"
+        if: "!startsWith(github.head_ref, 'dependabot/')"
         run: npx changeset status --since=origin/main
